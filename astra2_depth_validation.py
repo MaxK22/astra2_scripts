@@ -391,6 +391,17 @@ def depth_profile_dict(profile) -> dict[str, Any]:
 # Depth frame handling
 # -----------------------------------------------------------------------------
 def depth_frame_to_meters(depth_frame) -> tuple[np.ndarray, float]:
+    """Convert raw Y16 depth to metres using the Orbbec SDK scale.
+
+    IMPORTANT: In the current Orbbec Python SDK, ``get_depth_scale()`` is
+    applied to raw uint16 values to obtain **millimetres** (see the SDK
+    quick-start examples, where the result is named ``depth_mm``).
+    Therefore we must divide by 1000 after applying the SDK scale.
+
+    Returning metres here keeps all validation statistics and plots
+    internally consistent with the user-supplied reference distances, which
+    are specified in metres.
+    """
     width = int(depth_frame.get_width())
     height = int(depth_frame.get_height())
 
@@ -399,13 +410,16 @@ def depth_frame_to_meters(depth_frame) -> tuple[np.ndarray, float]:
         dtype=np.uint16,
     ).reshape(height, width)
 
-    scale = float(depth_frame.get_depth_scale())
-    depth_m = raw.astype(np.float64) * scale
+    sdk_scale = float(depth_frame.get_depth_scale())
+
+    # Current Orbbec SDK semantics: raw * sdk_scale = millimetres.
+    depth_mm = raw.astype(np.float64) * sdk_scale
+    depth_m = depth_mm / 1000.0
 
     # Zero is conventionally used for invalid depth by the SDK/file formats.
     depth_m[(raw == 0)] = np.nan
 
-    return depth_m, scale
+    return depth_m, sdk_scale
 
 
 def roi_bounds(depth_m: np.ndarray, roi_name: str) -> tuple[int, int, int, int]:
